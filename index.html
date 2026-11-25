@@ -56,7 +56,6 @@
         <div style="display:flex; flex-direction:column; flex:1; min-height:0;">
             <h2>Keranjang Penjualan</h2>
             <div class="form-group">
-                <button class="btn-checkout" style="background:#2980b9; margin-top:10px;" onclick="hubungkanArduino()">Hubungkan Layar Arduino</button>
                 <label for="tanggal-transaksi">Tanggal Transaksi</label>
                 <input type="date" id="tanggal-transaksi">
             </div>
@@ -214,7 +213,7 @@
                 if (result.status === "success") {
                     statusMsg.innerText = "Berhasil! Tercatat sebagai " + result.id;
                     cart = [];
-                    renderCart(kirimKeArduino(grandTotal.toLocaleString('id-ID')));
+                    renderCart();
                     await muatProduk();
                     setTimeout(() => { statusMsg.innerText = ""; }, 4000);
                 } else {
@@ -230,34 +229,7 @@
 
         renderCart();
         muatProduk();
-
-        let portSerial;
-let writerSerial;
-
-async function hubungkanArduino() {
-    try {
-        // Meminta pengguna memilih port USB Arduino yang terhubung
-        portSerial = await navigator.serial.requestPort();
-        await portSerial.open({ baudRate: 9600 });
-
-        const textEncoder = new TextEncoderStream();
-        textEncoder.readable.pipeTo(portSerial.writable);
-        writerSerial = textEncoder.writable.getWriter();
-
-        alert("Arduino berhasil terhubung!");
-    } catch (err) {
-        console.error("Gagal konek serial:", err);
-        alert("Gagal terhubung ke Arduino.");
-    }
 }
-
-// Fungsi untuk mengirim total harga ke Arduino setiap kali total berubah
-async function kirimKeArduino(teks) {
-    if (writerSerial) {
-        await writerSerial.write(teks + "\n");
-    }
-}
-        
     </script>
 </body>
 </html>
