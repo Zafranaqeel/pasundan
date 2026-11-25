@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kasir Stand Pasundan</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #f4f6f9; color: #333; display: flex; height: 100vh; overflow: hidden; }
+
+        .products-section { flex: 2; padding: 20px; overflow-y: auto; border-right: 1px solid #ddd; }
+        .cart-section { flex: 1; background: #fff; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; box-shadow: -2px 0 5px rgba(0,0,0,0.05); min-width: 280px; }
+        h2 { margin-bottom: 15px; color: #2c3e50; font-size: 1.2rem; }
+
+        .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
+        .product-card { background: #fff; border: 1px solid #e1e8ed; border-radius: 8px; padding: 15px; text-align: center; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .product-card:hover { border-color: #3498db; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.05); }
+        .product-card.habis { opacity: 0.45; cursor: not-allowed; transform: none; }
+        .product-card h3 { font-size: 0.95rem; margin-bottom: 8px; color: #34495e; }
+        .product-card p { color: #e67e22; font-weight: bold; font-size: 0.9rem; }
+        .product-card span { font-size: 0.75rem; color: #7f8c8d; display: block; margin-top: 5px; }
+
+        .cart-items { flex: 1; overflow-y: auto; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .cart-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 0.9rem; background: #f9f9f9; padding: 8px 10px; border-radius: 6px; }
+        .cart-item-info { flex: 1; }
+        .cart-item-controls { display: flex; align-items: center; gap: 8px; }
+        .cart-item-controls button { background: #e0e0e0; border: none; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .cart-item-controls button:hover { background: #d0d0d0; }
+
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; font-size: 0.85rem; margin-bottom: 5px; font-weight: 600; color: #555; }
+        .form-group input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
+
+        .cart-total { display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: bold; margin-bottom: 15px; color: #2c3e50; }
+        .btn-checkout { background: #27ae60; color: white; border: none; width: 100%; padding: 12px; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; transition: background 0.2s; }
+        .btn-checkout:hover { background: #219653; }
+        .btn-checkout:disabled { background: #95a5a6; cursor: not-allowed; }
+        #status-msg { font-size: 0.85rem; text-align: center; margin-top: 10px; color: #e67e22; font-weight: 600; min-height: 1.2em; }
+
+        @media (max-width: 700px) {
+            body { flex-direction: column; height: auto; overflow: auto; }
+            .products-section { border-right: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="products-section">
+        <h2>Pilih Produk</h2>
+        <div class="product-grid" id="product-grid">
+            <p style="color:#999;">Memuat produk dari spreadsheet...</p>
+        </div>
+    </div>
+
+    <div class="cart-section">
+        <div style="display:flex; flex-direction:column; flex:1; min-height:0;">
+            <h2>Keranjang Penjualan</h2>
+            <div class="form-group">
+                <label for="tanggal-transaksi">Tanggal Transaksi</label>
+                <input type="date" id="tanggal-transaksi">
+            </div>
+            <div class="cart-items" id="cart-items"></div>
+        </div>
+
+        <div>
+            <div class="cart-total">
+                <span>Total:</span>
+                <span id="grand-total">0 Kupon</span>
+            </div>
+            <button class="btn-checkout" id="btn-checkout" onclick="kirimTransaksi()" disabled>Simpan ke Spreadsheet</button>
+            <div id="status-msg"></div>
+        </div>
+    </div>
+
+    <script>
+        // Pastikan URL ini adalah URL Deploy terbaru dari Apps Script Anda
+        const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyV8s1BwC8phIajzBMI1frAgY0tNy6IoxujjknG00LCksgk02uljYIgPUf0BlAO03Hz/exec";
+
+        let products = [];
+        let cart = [];
+
+        const statusMsg = document.getElementById('status-msg');
+        const tanggalEl = document.getElementById('tanggal-transaksi');
+
+        function hariIni() {
+            const d = new Date();
+            d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+            return d.toISOString().slice(0, 10);
+        }
+        tanggalEl.value = hariIni();
+
+        async function muatProduk() {
+            const gridEl = document.getElementById('product-grid');
+            try {
+                const res = await fetch(SCRIPT_URL, { redirect: "follow" });
+                const data = await res.json();
+                if (data.status !== 'success') throw new Error(data.message);
+                products = data.produk;
+                renderProduk();
+            } catch (err) {
+                gridEl.innerHTML = `<p style="color:#c0392b;">Gagal memuat produk: ${err.message}</p>`;
+                console.error(err);
+            }
+        }
+
+        function renderProduk() {
+            const gridEl = document.getElementById('product-grid');
+            gridEl.innerHTML = '';
+            if (products.length === 0) {
+                gridEl.innerHTML = '<p style="color:#999;">Belum ada produk di spreadsheet.</p>';
+                return;
+            }
+            products.forEach(p => {
+                const card = document.createElement('div');
+                card.className = 'product-card' + (p.stok <= 0 ? ' habis' : '');
+                card.innerHTML = `
+                    <h3>${p.nama}</h3>
+                    <p>${p.harga.toLocaleString('id-ID')} Kupon</p>
+                    <span>${p.stok <= 0 ? 'Stok habis' : 'Sisa stok: ' + p.stok}</span>
+                `;
+                if (p.stok > 0) card.onclick = () => tambahKeKeranjang(p);
+                gridEl.appendChild(card);
+            });
+        }
+
+        function tambahKeKeranjang(product) {
+            const existing = cart.find(i => i.kode === product.kode);
+            if (existing) {
+                if (existing.qty >= product.stok) {
+                    statusMsg.innerText = "Stok " + product.nama + " tidak cukup.";
+                    return;
+                }
+                existing.qty += 1;
+            } else {
+                cart.push({ ...product, qty: 1 });
+            }
+            statusMsg.innerText = "";
+            renderCart();
+        }
+
+        function ubahQty(kode, delta) {
+            const item = cart.find(i => i.kode === kode);
+            if (!item) return;
+            if (delta > 0 && item.qty >= item.stok) {
+                statusMsg.innerText = "Stok " + item.nama + " tidak cukup.";
+                return;
+            }
+            item.qty += delta;
+            if (item.qty <= 0) cart = cart.filter(i => i.kode !== kode);
+            renderCart();
+        }
+
+        function renderCart() {
+            const container = document.getElementById('cart-items');
+            const checkoutBtn = document.getElementById('btn-checkout');
+            const totalEl = document.getElementById('grand-total');
+
+            if (cart.length === 0) {
+                container.innerHTML = '<p style="color:#999; font-size:0.85rem; text-align:center; margin-top:20px;">Keranjang masih kosong</p>';
+                checkoutBtn.disabled = true;
+                totalEl.innerText = '0 Kupon';
+                return;
+            }
+
+            container.innerHTML = '';
+            let grandTotal = 0;
+            cart.forEach(item => {
+                grandTotal += item.harga * item.qty;
+                const div = document.createElement('div');
+                div.className = 'cart-item';
+                div.innerHTML = `
+                    <div class="cart-item-info">
+                        <strong>${item.nama}</strong><br>
+                        <small>${item.harga.toLocaleString('id-ID')} x ${item.qty}</small>
+                    </div>
+                    <div class="cart-item-controls">
+                        <button onclick="ubahQty('${item.kode}', -1)">-</button>
+                        <span>${item.qty}</span>
+                        <button onclick="ubahQty('${item.kode}', 1)">+</button>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+            totalEl.innerText = `${grandTotal.toLocaleString('id-ID')} Kupon`;
+            checkoutBtn.disabled = false;
+        }
+
+        async function kirimTransaksi() {
+            const checkoutBtn = document.getElementById('btn-checkout');
+            const tanggal = tanggalEl.value;
+            if (!tanggal) {
+                alert("Harap isi tanggal transaksi terlebih dahulu!");
+                return;
+            }
+
+            const payload = {
+                tanggal: tanggal,
+                items: cart.map(i => ({ kode: i.kode, qty: i.qty }))
+            };
+
+            checkoutBtn.disabled = true;
+            statusMsg.innerText = "Mengirim data ke database...";
+
+            try {
+                const response = await fetch(SCRIPT_URL, {
+                    method: "POST",
+                    redirect: "follow",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+
+                if (result.status === "success") {
+                    statusMsg.innerText = "Berhasil! Tercatat sebagai " + result.id;
+                    cart = [];
+                    renderCart();
+                    await muatProduk();
+                    setTimeout(() => { statusMsg.innerText = ""; }, 4000);
+                } else {
+                    statusMsg.innerText = "Gagal: " + result.message;
+                    checkoutBtn.disabled = false;
+                }
+            } catch (error) {
+                statusMsg.innerText = "Terjadi kesalahan koneksi: " + error.message;
+                console.error(error);
+                checkoutBtn.disabled = false;
+            }
+        }
+
+        renderCart();
+        muatProduk();
+    </script>
+</body>
+</html>
